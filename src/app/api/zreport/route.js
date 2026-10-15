@@ -4,7 +4,7 @@ import { getOpenShift } from '@/lib/services/shiftService';
 import { saveZReport } from '@/lib/services/zReportService';
 
 export async function POST(request) {
-  const { user, error, status } = await requirePermission('reports', 'write');
+  const { user, error, status } = await requirePermission('zreport', 'write');
   if (error) return NextResponse.json({ error }, { status });
 
   const body = await request.json();

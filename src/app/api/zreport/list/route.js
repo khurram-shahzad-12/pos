@@ -4,7 +4,7 @@ import ZReport from '@/models/ZReport';
 import { requirePermission } from '@/lib/auth';
 
 export async function GET(request) {
-  const { error, status } = await requirePermission('reports', 'read');
+  const { error, status } = await requirePermission('zreport', 'read');
   if (error) return NextResponse.json({ error }, { status });
 
   const { searchParams } = new URL(request.url);

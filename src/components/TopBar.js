@@ -27,8 +27,8 @@ export default function TopBar({ title = 'POS', actions = null }) {
   };
 
   const navItems = [
-    tillCode && { href: `/pos/${tillCode}`,         label: 'Till',     perm: 'create:sales' },
-    tillCode && { href: `/pos/${tillCode}/zreport`, label: 'Z Report', perm: 'read:reports' },
+    tillCode && { href: `/pos/${tillCode}`,         label: 'Till',     perm: 'use:pos' },
+    tillCode && { href: `/pos/${tillCode}/zreport`, label: 'Z Report', perm: 'create:zreport' },
 
     { href: '/products', label: 'Products', perm: 'read:products' },
     { href: '/sales',    label: 'Sales',    perm: 'read:sales' },

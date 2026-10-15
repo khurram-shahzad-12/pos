@@ -4,7 +4,7 @@ import { getOpenShift } from '@/lib/services/shiftService';
 import { calculateZReport } from '@/lib/services/zReportService';
 
 export async function GET(request) {
-  const { error, status } = await requirePermission('reports', 'read');
+  const { error, status } = await requirePermission('zreport', 'read');
   if (error) return NextResponse.json({ error }, { status });
 
   const tillId = new URL(request.url).searchParams.get('tillId');

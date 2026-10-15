@@ -90,7 +90,7 @@ export default function LoginPage() {
         </button>
 
         <p className="text-center text-xs text-slate-400">
-          Default: admin@pos.local / admin123
+           © {new Date().getFullYear()} Cash & Carry POS. All rights reserved.
         </p>
       </form>
     </div>

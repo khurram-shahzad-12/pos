@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/auth';
 
 // GET /api/tills — list all tills
 export async function GET() {
-  const { error, status } = await requirePermission('settings', 'read');
+  const { error, status } = await requirePermission('tills', 'read');
   if (error) return NextResponse.json({ error }, { status });
 
   await dbConnect();
@@ -19,7 +19,7 @@ export async function GET() {
 
 // POST /api/tills — create a till
 export async function POST(request) {
-  const { error, status } = await requirePermission('settings', 'update');
+  const { error, status } = await requirePermission('tills', 'create');
   if (error) return NextResponse.json({ error }, { status });
 
   await dbConnect();
