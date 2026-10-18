@@ -49,7 +49,7 @@ function EditProductForm() {
         price: data.price?.toString() || '',
         stock: data.stock?.toString() || '0',
         category: data.category || '',
-        vatCode: data.vatCode || 'S',      
+        vatCode: data.vatCode || 'S',
         vatRate: data.vatRate ?? 20,
         pricingType: data.pricingType || 'unit',
         unit: data.unit || 'each',
@@ -63,7 +63,16 @@ function EditProductForm() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      if (name === 'pricingType') {
+        return {
+          ...prev,
+          pricingType: value,
+          unit: value === 'weight' ? (prev.unit === 'each' ? 'kg' : prev.unit) : 'each',
+        };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -83,24 +92,24 @@ function EditProductForm() {
       setError('Price must be greater than 0.');
       return;
     }
-
     try {
       setSaving(true);
+      const body = {
+        barcode: form.barcode.trim(),
+        name: form.name.trim(),
+        price: Number(form.price),
+        stock: Number(form.stock) || 0,
+        category: form.category.trim() || undefined,
+        vatCode: form.vatCode,
+        vatRate: Number(form.vatRate),
+        pricingType: form.pricingType,
+        unit: form.pricingType === 'weight' ? (form.unit) : 'each',
+      }
       const res = await fetch(`/api/products/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          barcode: form.barcode.trim(),
-          name: form.name.trim(),
-          price: Number(form.price),
-          stock: Number(form.stock) || 0,
-          category: form.category.trim() || undefined,
-          vatCode: form.vatCode,       
-          vatRate: Number(form.vatRate),
-          pricingType: form.pricingType,
-          unit: form.pricingType === 'weight' ? (form.unit || 'kg') : 'each',
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await res.json();
@@ -269,8 +278,9 @@ function EditProductForm() {
               </label>
               <select
                 name="unit"
-                value={form.unit || 'kg'}
+                value={form.unit}
                 onChange={handleChange}
+                required
                 className="w-full px-4 py-3 rounded-xl border-2 border-slate-300"
               >
                 <option value="kg">Kilograms (kg)</option>

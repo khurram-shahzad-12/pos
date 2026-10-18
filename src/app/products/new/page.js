@@ -28,12 +28,20 @@ export default function AddProductPage() {
   useEffect(() => {
     barcodeRef.current?.focus();
   }, []);
-
+  
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
+  const { name, value } = e.target;
+  setForm((prev) => {
+    if (name === 'pricingType') {
+      return {
+        ...prev,
+        pricingType: value,
+        unit: value === 'weight' ? (prev.unit === 'each' ? 'kg' : prev.unit) : 'each',
+      };
+    }
+    return { ...prev, [name]: value };
+  });
+};
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -53,7 +61,6 @@ export default function AddProductPage() {
       setError('Price must be greater than 0.');
       return;
     }
-
     try {
       setLoading(true);
       const res = await fetch('/api/products', {

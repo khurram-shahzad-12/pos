@@ -1,5 +1,4 @@
 'use client';
-
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import TopBar from '@/components/TopBar';
@@ -23,7 +22,7 @@ export default function TillPicker() {
         <div className="max-w-md w-full bg-white rounded-2xl shadow-sm p-8">
           <h1 className="text-2xl font-bold text-slate-900 mb-2 text-center">
             Which counter?
-          </h1>
+          </h1> 
           <p className="text-slate-500 text-sm text-center mb-6">
             Pick the till you're standing at.
           </p>

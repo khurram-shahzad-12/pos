@@ -1,6 +1,4 @@
-// src/proxy.js
 import { NextResponse } from 'next/server';
-
 const publicPaths = ['/login'];
 
 export default function proxy(request) {

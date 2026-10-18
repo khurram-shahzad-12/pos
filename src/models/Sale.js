@@ -108,6 +108,6 @@ const SaleSchema = new mongoose.Schema(
 
 SaleSchema.index({ shiftId: 1, createdAt: 1 });
 SaleSchema.index({ tillId: 1, createdAt: -1 });
-SaleSchema.index({ createdAt: -1 });   // for the admin /sales list
+SaleSchema.index({ createdAt: -1 });
 
 export default mongoose.models.Sale || mongoose.model('Sale', SaleSchema);

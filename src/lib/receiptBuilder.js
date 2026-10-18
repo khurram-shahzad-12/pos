@@ -1,5 +1,3 @@
-// src/lib/receiptBuilder.js
-
 const ESC = '\x1B';
 const GS = '\x1D';
 
@@ -10,9 +8,6 @@ function centre(text, width = 42) {
   return ' '.repeat(pad) + t;
 }
 
-/**
- * Left + right align on the same line.
- */
 function lineLR(left, right, width = 42) {
   const l = left.trim();
   const r = right.trim();
@@ -25,15 +20,13 @@ export function buildReceipt(sale, settings, options = {}) {
   const W = 42;
   const lines = [];
 
-  // ─── Initialize ───
-  lines.push(ESC + '@');       // Reset printer
-  lines.push(ESC + 'a' + '\x00'); // Left align (default)
+  lines.push(ESC + '@');
+  lines.push(ESC + 'a' + '\x00');
 
-  // ─── Header ───
-  lines.push(ESC + 'a' + '\x01'); // Centre align
-  lines.push(ESC + '!' + '\x10'); // Double height + width
+  lines.push(ESC + 'a' + '\x01');
+  lines.push(ESC + '!' + '\x10');
   lines.push((settings.storeName || 'STORE') + '\n');
-  lines.push(ESC + '!' + '\x00'); // Reset text size
+  lines.push(ESC + '!' + '\x00');
 
   if (settings.storeAddress) {
     lines.push(settings.storeAddress + '\n');
@@ -50,8 +43,7 @@ export function buildReceipt(sale, settings, options = {}) {
     lines.push('\n');
   }
 
-  // ─── Sale meta ───
-  lines.push(ESC + 'a' + '\x00'); // Left align
+  lines.push(ESC + 'a' + '\x00');
   lines.push('Receipt: ' + sale.receiptNumber + '\n');
   const dt = new Date(sale.createdAt);
   lines.push(
@@ -69,7 +61,6 @@ export function buildReceipt(sale, settings, options = {}) {
   lines.push('Till:    #' + (sale.tillNumber || '1') + '\n');
   lines.push('-'.repeat(W) + '\n');
 
-  // ─── Items ───
   for (const item of sale.items) {
     const code = item.vatCode || 'S';
     const nameLine = item.name + ' [' + code + ']';
@@ -88,13 +79,10 @@ export function buildReceipt(sale, settings, options = {}) {
    lines.push(lineLR(desc, '£' + lineTotal.toFixed(2), W) + '\n');
   }
   lines.push('-'.repeat(W) + '\n');
-
-  // ─── Subtotal ───
   lines.push(
     lineLR('Subtotal (excl VAT)', '£' + sale.subtotal.toFixed(2), W) + '\n'
   );
 
-  // ─── VAT breakdown ───
   if (sale.vatBreakdown && sale.vatBreakdown.length > 0) {
     for (const v of sale.vatBreakdown) {
       lines.push(
@@ -110,13 +98,10 @@ export function buildReceipt(sale, settings, options = {}) {
   }
 
   lines.push('-'.repeat(W) + '\n');
-
-  // ─── Total ───
   lines.push(ESC + '!' + '\x10'); // Double height
   lines.push(lineLR('TOTAL', '£' + sale.total.toFixed(2), W) + '\n');
   lines.push(ESC + '!' + '\x00'); // Reset
 
-  // ─── Payment ───
   lines.push('\n');
   lines.push(
     lineLR(
@@ -126,7 +111,6 @@ export function buildReceipt(sale, settings, options = {}) {
     ) + '\n'
   );
 
-  // ─── Footer ───
   lines.push('\n');
   lines.push(ESC + 'a' + '\x01'); // Centre
   if (settings.receiptFooter) {
@@ -134,13 +118,11 @@ export function buildReceipt(sale, settings, options = {}) {
   }
   lines.push('\n\n\n');
 
-  // ─── Cut paper ───
-  lines.push(GS + 'V' + '\x42' + '\x00'); // Partial cut
+  lines.push(GS + 'V' + '\x42' + '\x00');
 
   return lines.join('');
 }
 
 export function buildOpenDrawer() {
-  // ESC p m t1 t2 — pulse pin 2 (drawer 1) for 100ms
   return ESC + 'p' + '\x00' + '\x19' + '\xFA';
 }

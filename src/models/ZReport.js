@@ -12,10 +12,8 @@ const VatLineSchema = new mongoose.Schema(
 
 const ZReportSchema = new mongoose.Schema(
   {
-    // Per-till report number, e.g. "T1-Z000001"
     reportNumber: { type: String, required: true, unique: true, index: true },
 
-    // Which counter and which shift this report belongs to
     tillId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Till',
@@ -26,37 +24,30 @@ const ZReportSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Shift',
       required: true,
-      unique: true,   // exactly one Z report per shift
+      unique: true, 
     },
-
-    // Time window
     periodStart: { type: Date, required: true },
     periodEnd: { type: Date, required: true },
 
-    // Sales summary
     grossSales: { type: Number, required: true },
     transactionsCount: { type: Number, default: 0 },
     refundsCount: { type: Number, default: 0 },
     refundsTotal: { type: Number, default: 0 },
     netRevenue: { type: Number, required: true },
 
-    // VAT
     vatBreakdown: { type: [VatLineSchema], default: [] },
     totalVat: { type: Number, default: 0 },
 
-    // Payment split
     cashSales: { type: Number, default: 0 },
     cardSales: { type: Number, default: 0 },
     cashRefunds: { type: Number, default: 0 },
     cardRefunds: { type: Number, default: 0 },
 
-    // Cash reconciliation
     openingFloat: { type: Number, default: 0 },
     expectedCash: { type: Number, default: 0 },
     actualCash: { type: Number, default: 0 },
     variance: { type: Number, default: 0 },
 
-    // Who
     cashierId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     cashierName: { type: String },
     notes: { type: String },

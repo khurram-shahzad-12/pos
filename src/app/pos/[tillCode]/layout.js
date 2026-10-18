@@ -16,7 +16,6 @@ export default function TillLayout({ children }) {
   useEffect(() => {
     if (!tillCode) return;
 
-    // Reset state for the new till
     setError('');
     setTillId(undefined);
 

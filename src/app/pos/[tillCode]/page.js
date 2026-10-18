@@ -74,10 +74,8 @@ function CashierPage() {
     const code = barcodeInput.trim();
     if (!code) return;
 
-    // --- Weight barcode from scale (prefix 2) ---
     const parsed = parseWeightBarcode(code);
     if (parsed) {
-      // Look up the product by its stored PLU-barcode (e.g. "200042")
       const res = await fetch(`/api/products/barcode/2000${parsed.plu}`, {
         credentials: 'include',
       });

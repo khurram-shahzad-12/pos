@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-
 const CounterSchema = new mongoose.Schema({
   _id: { type: String },
   seq: { type: Number, default: 0 },

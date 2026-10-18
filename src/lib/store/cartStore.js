@@ -175,7 +175,6 @@ export const useCartStore = create(
       },
 
       clearAllParked: () => set({ parkedSales: [] }),
-      // Grand total = subtotal + VAT
       getTotal: () => {
         return get().getSubtotal() + get().getVatAmount();
       },

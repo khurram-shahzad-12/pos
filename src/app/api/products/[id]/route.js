@@ -1,4 +1,3 @@
-// app/api/products/[id]/route.js
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Product from '@/models/Product';
@@ -17,7 +16,6 @@ export async function PUT(request, { params }) {
   await dbConnect();
   const { id } = await params;
   const body = await request.json();
-
   try {
     const product = await Product.findByIdAndUpdate(id, body, {
       new: true,
