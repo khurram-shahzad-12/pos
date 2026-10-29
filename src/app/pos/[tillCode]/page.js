@@ -23,6 +23,7 @@ function CashierPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const barcodeRef = useRef(null);
+  const cartListRef = useRef(null);
 
   const cart = useCartStore((state) => state.cart);
   const addToCart = useCartStore((state) => state.addToCart);
@@ -55,6 +56,15 @@ function CashierPage() {
     setConfig({ title: 'Till', actions: null });
     return () => setConfig({ title: 'Cash & Carry POS', actions: null });
   }, [setConfig]);
+
+  useEffect(() => {
+  if (cartListRef.current && cart.length > 0) {
+    cartListRef.current.scrollTo({
+      top: cartListRef.current.scrollHeight,
+      behavior: 'smooth',
+    });
+  }
+}, [cart.length]);
 
   const fetchProducts = async () => {
     try {
@@ -331,136 +341,135 @@ function CashierPage() {
             )}
           </div>
         </div>
-
-        <div className="w-[420px] h-screen bg-white border-l border-slate-200 flex flex-col shadow-xl">
-          <div className="p-4 border-b border-slate-200">
-            <h2 className="text-xl font-bold text-slate-800"> Current Sale </h2>
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-sm text-slate-500">
-                {cart.length} item{cart.length !== 1 ? 's' : ''}
-              </p>
-              {parkedSales.length > 0 && (
-                <button
-                  onClick={() => setParkedModalOpen(true)}
-                  className="text-xs font-semibold text-purple-600 hover:text-purple-700"
-                >
-                  {parkedSales.length} parked
-                </button>
+        <div className="w-[60%] h-[90vh]  bg-white border-l border-slate-200 flex shadow-xl">
+          <div className="w-[60%] flex flex-col border-r border-slate-200 overflow-hidden">
+            <div className="p-4 border-b border-slate-200">
+              <h2 className="text-xl font-bold text-slate-800"> Current Sale </h2>
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-sm text-slate-500">
+                  {cart.length} item{cart.length !== 1 ? 's' : ''}
+                </p>
+                {parkedSales.length > 0 && (
+                  <button
+                    onClick={() => setParkedModalOpen(true)}
+                    className="text-xs font-semibold text-purple-600 hover:text-purple-700"
+                  >
+                    {parkedSales.length} parked
+                  </button>
+                )}
+              </div>
+            </div>
+            <div ref={cartListRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+              {cart.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <p className="text-lg">Cart is empty</p>
+                  <p className="text-sm">Scan a product to begin</p>
+                </div>
+              ) : (
+                cart.map((item) => (
+                  <div
+                    key={item._id}
+                    className="bg-slate-50 rounded-lg p-3 flex items-center justify-between"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 truncate"> {item.name} </p>
+                      <p className="text-sm text-slate-500">
+                        {item.pricingType === 'weight' ? `${(item.weight ?? 0).toFixed(3)} ${item.unit || 'kg'} × £${item.price.toFixed(2)}/${item.unit || 'kg'}` : `£${item.price.toFixed(2)} each`}
+                      </p>
+                      {item.pricingType === 'weight' && (
+                        <p className="text-xs text-slate-400"> = £{(item.price * (item.weight ?? 0)).toFixed(2)} </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 ml-2">
+                      {item.pricingType !== 'weight' && (
+                        <>
+                          <button
+                            onClick={() => updateQty(item._id, -1)}
+                            className="w-10 h-10 bg-slate-200 rounded-lg font-bold text-lg hover:bg-slate-300 active:scale-95 transition"
+                          >
+                            −
+                          </button>
+                          <span className="w-8 text-center font-bold text-lg"> {item.qty} </span>
+                          <button
+                            onClick={() => updateQty(item._id, 1)}
+                            className="w-10 h-10 bg-slate-200 rounded-lg font-bold text-lg hover:bg-slate-300 active:scale-95 transition"
+                          >
+                            +
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => removeFromCart(item._id)}
+                        className="w-10 h-10 bg-red-100 text-red-600 rounded-lg font-bold hover:bg-red-200 active:scale-95 transition ml-1"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                <p className="text-lg">Cart is empty</p>
-                <p className="text-sm">Scan a product to begin</p>
+          <div className="w-[40%] flex flex-col bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              <div className="flex justify-between text-slate-600">
+                <span>Subtotal (excl VAT)</span>
+                <span>£{subtotal.toFixed(2)}</span>
               </div>
-            ) : (
-              cart.map((item) => (
+              {Object.entries(vatBreakdown).map(([code, { rate, taxableAmount }]) => (
                 <div
-                  key={item._id}
-                  className="bg-slate-50 rounded-lg p-3 flex items-center justify-between"
+                  key={code}
+                  className="flex justify-between text-slate-600 text-sm"
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-800 truncate"> {item.name} </p>
-                    <p className="text-sm text-slate-500">
-                      {item.pricingType === 'weight' ? `${(item.weight ?? 0).toFixed(3)} ${item.unit || 'kg'} × £${item.price.toFixed(2)}/${item.unit || 'kg'}` : `£${item.price.toFixed(2)} each`}
-                    </p>
-                    {item.pricingType === 'weight' && (
-                      <p className="text-xs text-slate-400"> = £{(item.price * (item.weight ?? 0)).toFixed(2)} </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 ml-2">
-                    {item.pricingType !== 'weight' && (
-                      <>
-                        <button
-                          onClick={() => updateQty(item._id, -1)}
-                          className="w-10 h-10 bg-slate-200 rounded-lg font-bold text-lg hover:bg-slate-300 active:scale-95 transition"
-                        >
-                          −
-                        </button>
-                        <span className="w-8 text-center font-bold text-lg"> {item.qty} </span>
-                        <button
-                          onClick={() => updateQty(item._id, 1)}
-                          className="w-10 h-10 bg-slate-200 rounded-lg font-bold text-lg hover:bg-slate-300 active:scale-95 transition"
-                        >
-                          +
-                        </button>
-                      </>
-                    )}
-                    <button
-                      onClick={() => removeFromCart(item._id)}
-                      className="w-10 h-10 bg-red-100 text-red-600 rounded-lg font-bold hover:bg-red-200 active:scale-95 transition ml-1"
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <span>VAT @ {code} ({rate}%)</span>
+                  <span>£{((taxableAmount * rate) / 100).toFixed(2)}</span>
                 </div>
-              ))
-            )}
-          </div>
-
-          <div className="border-t border-slate-200 p-4 space-y-2 bg-slate-50">
-            <div className="flex justify-between text-slate-600">
-              <span>Subtotal (excl VAT)</span>
-              <span>£{subtotal.toFixed(2)}</span>
-            </div>
-            {Object.entries(vatBreakdown).map(([code, { rate, taxableAmount }]) => (
-              <div
-                key={code}
-                className="flex justify-between text-slate-600 text-sm"
-              >
-                <span>VAT @ {code} ({rate}%)</span>
-                <span>£{((taxableAmount * rate) / 100).toFixed(2)}</span>
+              ))}
+              <div className="flex justify-between text-2xl font-bold text-slate-900 pt-2 border-t border-slate-300">
+                <span>Total</span>
+                <span>£{total.toFixed(2)}</span>
               </div>
-            ))}
-
-            <div className="flex justify-between text-2xl font-bold text-slate-900 pt-2 border-t border-slate-300">
-              <span>Total</span>
-              <span>£{total.toFixed(2)}</span>
             </div>
-          </div>
-
-          <div className="p-4 space-y-3">
-            <button
-              disabled={cart.length === 0}
-              className="w-full py-4 bg-green-600 text-white text-xl font-bold rounded-xl hover:bg-green-500 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed min-h-[60px]"
-            >
-              Pay by Card
-            </button>
-            <button
-              onClick={handlePayByCash}
-              disabled={cart.length === 0}
-              className="w-full py-4 bg-blue-600 text-white text-xl font-bold rounded-xl hover:bg-blue-500 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed min-h-[60px]"
-            >
-              Pay by Cash
-            </button>
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 space-y-3 border-t border-slate-300">
               <button
-                onClick={handleHoldSale}
                 disabled={cart.length === 0}
-                className="py-3 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-400 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px]"
+                className="w-full py-4 bg-green-600 text-white text-xl font-bold rounded-xl hover:bg-green-500 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed min-h-[60px]"
               >
-                Hold Sale
+                Pay by Card
               </button>
               <button
-                onClick={() => setParkedModalOpen(true)}
-                disabled={parkedSales.length === 0}
-                className="py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-500 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px]"
+                onClick={handlePayByCash}
+                disabled={cart.length === 0}
+                className="w-full py-4 bg-blue-600 text-white text-xl font-bold rounded-xl hover:bg-blue-500 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed min-h-[60px]"
               >
-                Parked ({parkedSales.length})
+                Pay by Cash
+              </button>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={handleHoldSale}
+                  disabled={cart.length === 0}
+                  className="py-3 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-400 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px]"
+                >
+                  Hold Sale
+                </button>
+                <button
+                  onClick={() => setParkedModalOpen(true)}
+                  disabled={parkedSales.length === 0}
+                  className="py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-500 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px]"
+                >
+                  Parked ({parkedSales.length})
+                </button>
+              </div>
+
+              <button
+                onClick={clearCart}
+                disabled={cart.length === 0}
+                className="w-full py-3 bg-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-300 active:scale-95 transition disabled:opacity-40 min-h-[44px]"
+              >
+                Clear Cart
               </button>
             </div>
-
-            <button
-              onClick={clearCart}
-              disabled={cart.length === 0}
-              className="w-full py-3 bg-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-300 active:scale-95 transition disabled:opacity-40 min-h-[44px]"
-            >
-              Clear Cart
-            </button>
           </div>
         </div>
       </div>
