@@ -441,7 +441,7 @@ function CashierPage() {
                 </div>
               ))}
               <div className="flex justify-between text-slate-600">
-                <span>Total (excl VAT)</span>
+                <span>(excl VAT)</span>
                 <span>£{totalExVat.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-2xl font-bold text-slate-900 pt-2 border-t border-slate-300">
