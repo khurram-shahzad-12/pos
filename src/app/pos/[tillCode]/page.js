@@ -44,6 +44,22 @@ function CashierPage() {
   const vatAmount = getVatAmount();
   const total = getTotal();
 
+  const subtotalInclVat = cart.reduce((sum, item) => {
+    const lineTotal = item.pricingType === 'weight' ? item.price * (item.weight ?? 0) : item.price * (item.qty ?? 1);
+    return sum + lineTotal;
+  }, 0);
+  const vatBackCalculated = Object.entries(vatBreakdown).reduce(
+    (acc, [code, { rate, taxableAmount }]) => {
+      const vatPortion = Math.round((taxableAmount - taxableAmount / (1 + rate / 100)) * 100) / 100;
+      acc[code] = { rate, taxableAmount, vatPortion };
+      return acc;
+    },
+    {}
+  );
+  const vatTotalBackCalculated = Object.values(vatBackCalculated).reduce( (sum, g) => sum + g.vatPortion, 0 );
+
+  const totalExVat = Math.round((subtotalInclVat - vatTotalBackCalculated) * 100) / 100;
+   const finalTotal = subtotalInclVat;
   useEffect(() => {
     barcodeRef.current?.focus();
   }, []);
@@ -135,7 +151,7 @@ function CashierPage() {
 
   const handleCompleteCashSale = async () => {
     const received = parseFloat(amountReceived);
-    if (isNaN(received) || received < total) {
+    if (isNaN(received) || received < finalTotal) {
       setError('Amount received must be at least the total');
       return;
     }
@@ -147,7 +163,7 @@ function CashierPage() {
       const payload = {
         tillId,
         items: cart.map((item) => ({
-          productId: item._id,
+          productId: item.productId ?? item._id,
           name: item.name,
           barcode: item.barcode,
           price: item.price,
@@ -158,15 +174,17 @@ function CashierPage() {
           vatCode: item.vatCode ?? 'S',
           vatRate: item.vatRate ?? 20,
         })),
-        subtotal: Number(subtotal.toFixed(2)),
-        tax: Number(vatAmount.toFixed(2)),
-        total: Number(total.toFixed(2)),
+        subtotal: Number(totalExVat.toFixed(2)),                 
+        tax: Number(vatTotalBackCalculated.toFixed(2)),         
+        total: Number(finalTotal.toFixed(2)),  
         paymentMethod: 'cash',
-        vatBreakdown: Object.entries(vatBreakdown).map(([code, { rate, taxableAmount }]) => ({
+        amountReceived: Number(received.toFixed(2)),
+        changeGiven:    Number((received - finalTotal).toFixed(2)),   
+        vatBreakdown: Object.entries(vatBackCalculated).map(([code, g]) => ({
           code,
-          rate,
-          taxableAmount: Number(taxableAmount.toFixed(2)),
-          vatAmount: Number(((taxableAmount * rate) / 100).toFixed(2)),
+          rate: g.rate,
+          taxableAmount: Number((g.taxableAmount - g.vatPortion).toFixed(2)),
+          vatAmount: Number(g.vatPortion.toFixed(2)), 
         })),
       };
 
@@ -180,11 +198,11 @@ function CashierPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create sale');
 
-      const change = received - total;
+      const change = received - finalTotal;
 
       setCompletedSale({
         receiptNumber: data.receiptNumber,
-        total,
+        total: finalTotal,
         received,
         change,
       });
@@ -252,8 +270,8 @@ function CashierPage() {
   function parseWeightBarcode(code) {
     if (!/^2\d{12}$/.test(code)) return null;
 
-    const plu = code.slice(1, 6);            // digits 2-6, e.g. "00042"
-    const weightGrams = parseInt(code.slice(6, 11), 10);  // digits 7-11, e.g. 850
+    const plu = code.slice(1, 6);      
+    const weightGrams = parseInt(code.slice(6, 11), 10);  
     if (!Number.isFinite(weightGrams) || weightGrams <= 0) return null;
 
     return { plu, weightGrams };
@@ -413,21 +431,22 @@ function CashierPage() {
           <div className="w-[40%] flex flex-col bg-slate-50">
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               <div className="flex justify-between text-slate-600">
-                <span>Subtotal (excl VAT)</span>
-                <span>£{subtotal.toFixed(2)}</span>
+                <span>Subtotal (incl VAT)</span>
+                <span>£{subtotalInclVat.toFixed(2)}</span>
               </div>
-              {Object.entries(vatBreakdown).map(([code, { rate, taxableAmount }]) => (
-                <div
-                  key={code}
-                  className="flex justify-between text-slate-600 text-sm"
-                >
-                  <span>VAT @ {code} ({rate}%)</span>
-                  <span>£{((taxableAmount * rate) / 100).toFixed(2)}</span>
+              {Object.entries(vatBackCalculated).map(([code, g]) => (
+                <div key={code} className="flex justify-between text-slate-600 text-sm">
+                  <span>VAT @ {code} ({g.rate}%)</span>
+                  <span>£{g.vatPortion.toFixed(2)}</span>
                 </div>
               ))}
+              <div className="flex justify-between text-slate-600">
+                <span>Total (excl VAT)</span>
+                <span>£{totalExVat.toFixed(2)}</span>
+              </div>
               <div className="flex justify-between text-2xl font-bold text-slate-900 pt-2 border-t border-slate-300">
                 <span>Total</span>
-                <span>£{total.toFixed(2)}</span>
+                <span>£{finalTotal.toFixed(2)}</span>
               </div>
             </div>
             <div className="p-4 space-y-3 border-t border-slate-300">
@@ -488,7 +507,7 @@ function CashierPage() {
               <div className="bg-slate-100 rounded-xl p-4 text-center">
                 <p className="text-sm text-slate-500">Amount Due</p>
                 <p className="text-4xl font-bold text-slate-900">
-                  £{total.toFixed(2)}
+                  £{finalTotal.toFixed(2)}
                 </p>
               </div>
 
@@ -508,10 +527,10 @@ function CashierPage() {
                   ))}
                 </div>
                 <button
-                  onClick={() => setAmountReceived(total.toFixed(2))}
+                  onClick={() => setAmountReceived(finalTotal.toFixed(2))}
                   className="mt-2 w-full py-3 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 active:scale-95 transition min-h-[44px]"
                 >
-                  Exact Amount (£{total.toFixed(2)})
+                  Exact Amount (£{finalTotal.toFixed(2)})
                 </button>
               </div>
 
@@ -531,11 +550,11 @@ function CashierPage() {
                 />
               </div>
 
-              {parseFloat(amountReceived) >= total && (
+              {parseFloat(amountReceived) >= finalTotal && (
                 <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-center">
                   <p className="text-sm text-green-700 font-semibold">Change Due</p>
                   <p className="text-3xl font-bold text-green-700">
-                    £{(parseFloat(amountReceived) - total).toFixed(2)}
+                    £{(parseFloat(amountReceived) - finalTotal).toFixed(2)}
                   </p>
                 </div>
               )}
@@ -561,7 +580,7 @@ function CashierPage() {
               </button>
               <button
                 onClick={handleCompleteCashSale}
-                disabled={processing || parseFloat(amountReceived) < total}
+                disabled={processing || parseFloat(amountReceived) < finalTotal}
                 className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-500 disabled:opacity-50 min-h-[44px]"
               >
                 {processing ? 'Processing...' : 'Complete Sale'}

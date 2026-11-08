@@ -97,7 +97,8 @@ const SaleSchema = new mongoose.Schema(
       enum: ['cash', 'card', null],
       default: null,
     },
-
+    amountReceived: { type: Number, default: null }, 
+    changeGiven:    { type: Number, default: null },
   },
   {
     collection: 'Sales',

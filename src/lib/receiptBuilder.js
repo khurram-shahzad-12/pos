@@ -16,7 +16,7 @@ function lineLR(left, right, width = 42) {
 }
 
 export function buildReceipt(sale, settings, options = {}) {
-  const {isRefund = false} = options;
+  const { isRefund = false } = options;
   const W = 42;
   const lines = [];
 
@@ -36,7 +36,7 @@ export function buildReceipt(sale, settings, options = {}) {
   }
   lines.push('\n');
 
-    if (isRefund) {
+  if (isRefund) {
     lines.push(ESC + '!' + '\x10');
     lines.push('*** REFUND ***\n');
     lines.push(ESC + '!' + '\x00');
@@ -48,14 +48,14 @@ export function buildReceipt(sale, settings, options = {}) {
   const dt = new Date(sale.createdAt);
   lines.push(
     'Date:    ' +
-      dt.toLocaleString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }) +
-      '\n'
+    dt.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }) +
+    '\n'
   );
   lines.push('Cashier: ' + (sale.cashierName || 'Till') + '\n');
   lines.push('Till:    #' + (sale.tillNumber || '1') + '\n');
@@ -67,16 +67,16 @@ export function buildReceipt(sale, settings, options = {}) {
     lines.push(nameLine + '\n');
     let desc;
     let lineTotal;
-    if(item.pricingType === 'weight') {
+    if (item.pricingType === 'weight') {
       const weight = item.weight ?? 0;
       const unit = item.unit || 'kg';
       desc = `  ${weight.toFixed(3)}${unit} @ £${item.price.toFixed(2)}/${unit}`;
       lineTotal = item.price * weight;
-    }else{
+    } else {
       desc = `  ${item.qty} x £${item.price.toFixed(2)}`;
       lineTotal = item.price * item.qty;
     }
-   lines.push(lineLR(desc, '£' + lineTotal.toFixed(2), W) + '\n');
+    lines.push(lineLR(desc, '£' + lineTotal.toFixed(2), W) + '\n');
   }
   lines.push('-'.repeat(W) + '\n');
   lines.push(
@@ -103,14 +103,31 @@ export function buildReceipt(sale, settings, options = {}) {
   lines.push(ESC + '!' + '\x00'); // Reset
 
   lines.push('\n');
-  lines.push(
-    lineLR(
-      'Paid (' + sale.paymentMethod.toUpperCase() + ')',
-      '£' + sale.total.toFixed(2),
-      W
-    ) + '\n'
-  );
-
+  if (sale.paymentMethod === 'cash' && sale.amountReceived != null) {
+    lines.push(
+      lineLR(
+        'Cash',
+        '£' + Number(sale.amountReceived).toFixed(2),
+        W
+      ) + '\n'
+    );
+    lines.push(
+      lineLR(
+        'Paid (' + sale.paymentMethod.toUpperCase() + ')',
+        '£' + sale.total.toFixed(2),
+        W
+      ) + '\n'
+    );
+    if (sale.changeGiven != null && Number(sale.changeGiven) > 0) {
+      lines.push(
+        lineLR(
+          'Change (Return)',
+          '£' + Number(sale.changeGiven).toFixed(2),
+          W
+        ) + '\n'
+      );
+    }
+  }
   lines.push('\n');
   lines.push(ESC + 'a' + '\x01'); // Centre
   if (settings.receiptFooter) {

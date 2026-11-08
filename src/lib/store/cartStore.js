@@ -90,8 +90,6 @@ export const useCartStore = create(
         }
         return breakdown;
       },
-
-      // Total VAT across all bands
       getVatAmount: () => {
         const breakdown = get().getVatBreakdown();
         let vat = 0;

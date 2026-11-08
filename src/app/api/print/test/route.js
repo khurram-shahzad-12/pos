@@ -1,30 +1,50 @@
-// src/app/api/print/test/route.js
 import { NextResponse } from 'next/server';
 import net from 'net';
 import dbConnect from '@/lib/db';
 import Setting from '@/models/Setting';
+import Till from '@/models/Till';
 import { requirePermission } from '@/lib/auth';
 
-export async function POST() {
+export async function POST(request) {
   // Only users with settings permission can trigger test prints
   const { error, status } = await requirePermission('settings', 'update');
   if (error) return NextResponse.json({ error }, { status });
 
   await dbConnect();
-  const settings = await Setting.findOne({ key: 'store' }).lean();
 
-  if (!settings) {
+  // Accept optional tillId in body so the UI can pick which printer to test
+  let body = {};
+  try {
+    body = await request.json();
+  } catch {
+    // no body is fine — fall back to default till
+  }
+  const { tillId } = body;
+
+  // Resolve the till whose printer we'll test
+  let till;
+  if (tillId) {
+    till = await Till.findById(tillId).lean();
+  } else {
+    // No till specified — pick the first active till that has a printer configured
+    till = await Till.findOne({
+      active: true,
+      printerIp: { $exists: true, $ne: '' },
+    }).lean();
+  }
+
+  if (!till) {
     return NextResponse.json(
-      { error: 'Settings not found. Save your printer settings first.' },
+      { error: 'No till with a configured printer found.' },
       { status: 400 }
     );
   }
 
-  const { printerIp, printerPort } = settings;
+  const { printerIp, printerPort } = till;
 
   if (!printerIp || !printerPort) {
     return NextResponse.json(
-      { error: 'Printer IP or port not configured in settings.' },
+      { error: `Printer IP or port not configured on till "${till.name || till.code}".` },
       { status: 400 }
     );
   }
@@ -37,6 +57,8 @@ export async function POST() {
     'TEST RECEIPT\n' +
     '================================\n' +
     'Printer is working!\n' +
+    `Till: ${till.name || till.code}\n` +
+    `Target: ${printerIp}:${printerPort}\n` +
     new Date().toLocaleString('en-GB') + '\n' +
     '================================\n' +
     '\n\n\n' +
@@ -83,5 +105,8 @@ export async function POST() {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, message: 'Test receipt sent' });
+  return NextResponse.json({
+    success: true,
+    message: `Test receipt sent to ${till.name || till.code} (${printerIp}:${printerPort})`,
+  });
 }
