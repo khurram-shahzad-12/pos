@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useTill } from '@/components/TillProvider';
 import { useCartStore } from '@/lib/store/cartStore';
 import { usePosTopBar } from '@/lib/context/PosTopBarContext';
+import { getBridge } from '@/lib/Printing';
+import { buildReceipt } from '@/lib/receiptBuilder';
 
 function CashierPage() {
   const tillId = useTill();
@@ -22,6 +24,7 @@ function CashierPage() {
   const [weightInput, setWeightInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [storeSettings, setStoreSettings] = useState({});
   const barcodeRef = useRef(null);
   const cartListRef = useRef(null);
 
@@ -56,16 +59,23 @@ function CashierPage() {
     },
     {}
   );
-  const vatTotalBackCalculated = Object.values(vatBackCalculated).reduce( (sum, g) => sum + g.vatPortion, 0 );
+  const vatTotalBackCalculated = Object.values(vatBackCalculated).reduce((sum, g) => sum + g.vatPortion, 0);
 
   const totalExVat = Math.round((subtotalInclVat - vatTotalBackCalculated) * 100) / 100;
-   const finalTotal = subtotalInclVat;
+  const finalTotal = subtotalInclVat;
+
   useEffect(() => {
     barcodeRef.current?.focus();
   }, []);
 
   useEffect(() => {
     fetchProducts();
+    // 👇 ADD THESE LINES
+    fetch('/api/settings', { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => setStoreSettings(data))
+      .catch(err => console.error("Could not load settings", err));
+    // 👆 END OF ADDED LINES
   }, []);
 
   useEffect(() => {
@@ -74,13 +84,13 @@ function CashierPage() {
   }, [setConfig]);
 
   useEffect(() => {
-  if (cartListRef.current && cart.length > 0) {
-    cartListRef.current.scrollTo({
-      top: cartListRef.current.scrollHeight,
-      behavior: 'smooth',
-    });
-  }
-}, [cart.length]);
+    if (cartListRef.current && cart.length > 0) {
+      cartListRef.current.scrollTo({
+        top: cartListRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
+  }, [cart.length]);
 
   const fetchProducts = async () => {
     try {
@@ -174,17 +184,17 @@ function CashierPage() {
           vatCode: item.vatCode ?? 'S',
           vatRate: item.vatRate ?? 20,
         })),
-        subtotal: Number(totalExVat.toFixed(2)),                 
-        tax: Number(vatTotalBackCalculated.toFixed(2)),         
-        total: Number(finalTotal.toFixed(2)),  
+        subtotal: Number(totalExVat.toFixed(2)),
+        tax: Number(vatTotalBackCalculated.toFixed(2)),
+        total: Number(finalTotal.toFixed(2)),
         paymentMethod: 'cash',
         amountReceived: Number(received.toFixed(2)),
-        changeGiven:    Number((received - finalTotal).toFixed(2)),   
+        changeGiven: Number((received - finalTotal).toFixed(2)),
         vatBreakdown: Object.entries(vatBackCalculated).map(([code, g]) => ({
           code,
           rate: g.rate,
           taxableAmount: Number((g.taxableAmount - g.vatPortion).toFixed(2)),
-          vatAmount: Number(g.vatPortion.toFixed(2)), 
+          vatAmount: Number(g.vatPortion.toFixed(2)),
         })),
       };
 
@@ -207,17 +217,35 @@ function CashierPage() {
         change,
       });
 
-      fetch('/api/print/receipt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ saleId: data._id, openDrawer: true }),
-      }).catch((err) => console.error('Receipt print failed:', err));
-
       setCashModalOpen(false);
       setAmountReceived('');
       clearCart();
       fetchProducts();
+
+      // 👇 CHANGED: TRIGGER QZ TRAY LOCAL PRINTING
+      // 👇 NEW: TRIGGER POS HARDWARE BRIDGE PRINTING
+      try {
+        // 1. Connect to the bridge using your Access Token
+        // ⚠️ REPLACE WITH YOUR ACTUAL TOKEN
+        // const bridge = new BridgeClient({
+        //   token: '8d02f2d6da2618d821d944c8ec5df5234ab7edc593f90bab'
+        // });
+        const { bridge, printerId } = await getBridge(tillId);
+
+        // 2. Build the receipt
+        const bill = buildReceipt(data, storeSettings);
+
+        // 3. Print to the bridge (using the ID from the dashboard: 'receipt')
+        await bridge.printReceipt(bill, { printer: printerId });
+
+      } catch (printErr) {
+        console.error('Bridge printing failed:', printErr);
+         if (printErr.details) {
+    console.error('Error details:', printErr.details);
+  }
+        // We don't block the UI if printing fails, we just log it.
+      }
+
     } catch (err) {
       setError(err.message);
     } finally {
@@ -267,11 +295,12 @@ function CashierPage() {
       setError(err.message);
     }
   };
+
   function parseWeightBarcode(code) {
     if (!/^2\d{12}$/.test(code)) return null;
 
-    const plu = code.slice(1, 6);      
-    const weightGrams = parseInt(code.slice(6, 11), 10);  
+    const plu = code.slice(1, 6);
+    const weightGrams = parseInt(code.slice(6, 11), 10);
     if (!Number.isFinite(weightGrams) || weightGrams <= 0) return null;
 
     return { plu, weightGrams };

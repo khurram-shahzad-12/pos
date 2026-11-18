@@ -3,7 +3,6 @@ import dbConnect from '@/lib/db';
 import Till from '@/models/Till';
 import { requirePermission } from '@/lib/auth';
 
-// GET /api/tills — list all tills
 export async function GET() {
   const { error, status } = await requirePermission('tills', 'read');
   if (error) return NextResponse.json({ error }, { status });
@@ -11,10 +10,13 @@ export async function GET() {
   await dbConnect();
 
   const tills = await Till.find({})
+    .select('+bridgeToken')
     .sort({ code: 1 })
     .lean();
 
-  return NextResponse.json(tills);   // raw array
+  return NextResponse.json(
+    tills.map(({ bridgeToken, ...t }) => ({ ...t, hasBridgeToken: !!bridgeToken }))
+  );
 }
 
 // POST /api/tills — create a till
@@ -37,13 +39,16 @@ export async function POST(request) {
       name: body.name.trim(),
       code: body.code.trim().toUpperCase(),
       location: body.location || '',
-      printerIp: body.printerIp || '',
-      printerPort: body.printerPort || '9100',
+      printerId: (body.printerId || 'receipt').trim(),
+      bridgeToken: body.bridgeToken?.trim() || undefined,
+      printerName: body.printerName || '',
+
       stripeReaderId: body.stripeReaderId || '',
       stripeLocationId: body.stripeLocationId || '',
       active: body.active !== false,
     });
-    return NextResponse.json(till, { status: 201 });
+    const { bridgeToken, ...safe } = till.toObject();
+    return NextResponse.json({ ...safe, hasBridgeToken: !!bridgeToken }, { status: 201 });
   } catch (err) {
     if (err.code === 11000) {
       return NextResponse.json(

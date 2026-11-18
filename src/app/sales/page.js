@@ -701,6 +701,9 @@
 // }
 
 // src/app/sales/page.jsx
+
+
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -708,11 +711,12 @@ import TopBar from '@/components/TopBar';
 import { useAuth } from '@/lib/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useOptionalTill } from '@/components/TillProvider';
+import { getBridge } from '@/lib/Printing';
+import { buildReceipt } from '@/lib/receiptBuilder';
 
 function SalesHistory() {
   const { hasPermission } = useAuth();
   const canRefund = hasPermission('update:sales');
-
   const [sales, setSales] = useState([]);
   const [tills, setTills] = useState([]);
   const [refundModalSale, setRefundModalSale] = useState(null);
@@ -722,6 +726,7 @@ function SalesHistory() {
   const [refunding, setRefunding] = useState(false);
   const [receiptSearch, setReceiptSearch] = useState('');
   const [refundTillId, setRefundTillId] = useState('');
+  const [storeSettings, setStoreSettings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -734,6 +739,13 @@ function SalesHistory() {
   const currentTillId = useOptionalTill();
 
   useEffect(() => {
+    fetch('/api/settings', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data) => setStoreSettings(data || {}))
+      .catch((err) => console.error('Could not load settings', err));
+  }, []);
+
+  useEffect(() => {
     fetch('/api/tills', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => setTills(Array.isArray(data) ? data : []))
@@ -742,7 +754,6 @@ function SalesHistory() {
 
   useEffect(() => {
     fetchSales();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFilter, methodFilter, tillFilter]);
 
   const fetchSales = async () => {
@@ -840,18 +851,55 @@ function SalesHistory() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Refund failed');
+      const printTillId = currentTillId || refundTillId || null;
 
-      // Print refund receipt
-      fetch('/api/print/receipt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          saleId: data.refundSale._id,
-          openDrawer: refundMethod === 'cash',
-          isRefund: true,
-        }),
-      }).catch(() => { });
+      if (printTillId) {
+        try {
+          const { bridge, printerId } = await getBridge(printTillId);
+          const refundItems = (data.refundSale?.items || []).map((it) => ({
+            name: it.name,
+            price: it.price,
+            qty: it.qty,
+            weight: it.weight ?? null,
+            pricingType: it.pricingType ?? 'unit',
+            unit: it.unit ?? 'each',
+            vatCode: it.vatCode ?? 'S',
+          }));
+
+          const refundForPrint = {
+            ...data.refundSale,
+            receiptNumber: data.refundSale?.receiptNumber ?? `REF-${Date.now()}`,
+            createdAt: data.refundSale?.createdAt ?? new Date().toISOString(),
+            cashierName: data.refundSale?.cashierName ?? 'Till',
+            tillNumber: data.refundSale?.tillNumber ?? (printTillId ? undefined : '1'),
+            items: refundItems,
+            subtotal: data.refundSale?.subtotal ?? 0,
+            tax: data.refundSale?.tax ?? 0,
+            total: data.refundSale?.total ?? 0,
+            vatBreakdown: data.refundSale?.vatBreakdown ?? [],
+            paymentMethod: refundMethod,      
+            amountReceived: refundMethod === 'cash' ? data.refundSale?.total ?? 0 : null,
+            changeGiven: 0,
+            isRefund: true,
+            refundOfReceipt: refundModalSale.receiptNumber,
+            refundReason: refundReason || null,
+          };
+          const bill = buildReceipt(refundForPrint, storeSettings, { isRefund: true });
+          await bridge.printReceipt(bill, { printer: printerId });
+          if (refundMethod === 'cash' && typeof bridge.openCashDrawer === 'function') {
+            try {
+              await bridge.openCashDrawer({ printer: printerId });
+            } catch (drawerErr) {
+              console.warn('Drawer open failed:', drawerErr);
+            }
+          }
+        } catch (printErr) {
+          console.error('Refund receipt print failed:', printErr);
+          if (printErr.details) console.error('Print error details:', printErr.details);
+        }
+      } else {
+        console.warn('Refund printing skipped — no till selected for printing');
+      }
 
       setRefundModalSale(null);
       setRefundForm({});
@@ -909,8 +957,6 @@ function SalesHistory() {
           {error}
         </div>
       )}
-
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4">
         <div className="bg-white rounded-xl shadow-sm p-5">
           <p className="text-sm text-slate-500">Total Sales</p>
@@ -1188,55 +1234,40 @@ function SalesHistory() {
                   </div>
                 ))}
               </div>
-
-              {/* CHANGED: VAT-inclusive breakdown, matching the till:
-                  Subtotal (incl VAT) -> VAT per rate (back-calculated) ->
-                  Total (excl VAT) -> Total (customer paid). */}
               {(() => {
-                // CHANGED: `selectedSale.total` is the VAT-inclusive amount the customer paid
                 const subtotalInclVat = selectedSale.total;
-
-                // CHANGED: build per-rate VAT lines by back-calculating VAT out of
-                // the VAT-INCLUSIVE amount for each rate group. The inclusive amount
-                // for a rate is (exVAT taxableAmount + vatAmount).
                 const vatLines =
                   selectedSale.vatBreakdown &&
-                  selectedSale.vatBreakdown.length > 0
+                    selectedSale.vatBreakdown.length > 0
                     ? selectedSale.vatBreakdown.map((line) => {
-                        const inclusive = line.taxableAmount + line.vatAmount; // CHANGED
-                        const vatPortion =
-                          Math.round(
-                            (inclusive - inclusive / (1 + line.rate / 100)) * 100
-                          ) / 100; // CHANGED: back-calculated VAT
-                        return {
-                          code: line.code,
-                          rate: line.rate,
-                          vatPortion,
-                        };
-                      })
+                      const inclusive = line.taxableAmount + line.vatAmount; 
+                      const vatPortion =
+                        Math.round(
+                          (inclusive - inclusive / (1 + line.rate / 100)) * 100
+                        ) / 100;
+                      return {
+                        code: line.code,
+                        rate: line.rate,
+                        vatPortion,
+                      };
+                    })
                     : [
-                        {
-                          code: 'VAT',
-                          rate: null,
-                          vatPortion: selectedSale.tax, // CHANGED: fallback if no breakdown
-                        },
-                      ];
-
-                // CHANGED: sum of back-calculated VAT
+                      {
+                        code: 'VAT',
+                        rate: null,
+                        vatPortion: selectedSale.tax,
+                      },
+                    ];
                 const vatTotal = vatLines.reduce((s, l) => s + l.vatPortion, 0);
-                // CHANGED: ex-VAT total = inclusive subtotal - back-calculated VAT
                 const totalExVat =
                   Math.round((subtotalInclVat - vatTotal) * 100) / 100;
 
                 return (
                   <div className="pt-3 space-y-1">
-                    {/* CHANGED: Subtotal (incl VAT) shown first */}
                     <div className="flex justify-between text-sm text-slate-600">
                       <span>Subtotal (incl VAT)</span>
                       <span>£{subtotalInclVat.toFixed(2)}</span>
                     </div>
-
-                    {/* CHANGED: VAT per rate — back-calculated portion, not added on top */}
                     {vatLines.map((line) => (
                       <div
                         key={line.code}
@@ -1249,14 +1280,10 @@ function SalesHistory() {
                         <span>£{line.vatPortion.toFixed(2)}</span>
                       </div>
                     ))}
-
-                    {/* CHANGED: Total (excl VAT) line */}
                     <div className="flex justify-between text-sm text-slate-600">
                       <span>Total (excl VAT)</span>
                       <span>£{totalExVat.toFixed(2)}</span>
                     </div>
-
-                    {/* CHANGED: final Total = VAT-inclusive amount paid */}
                     <div className="flex justify-between text-xl font-bold text-slate-900 pt-2 border-t border-slate-200">
                       <span>Total</span>
                       <span>£{subtotalInclVat.toFixed(2)}</span>
@@ -1391,27 +1418,27 @@ function SalesHistory() {
                   className="w-full px-4 py-3 rounded-xl border-2 border-slate-300"
                 />
               </div>
-            {!currentTillId && (
-              <div>
-                <label className="block text-sm font-semibold mb-2">Refund to till</label>
-                <select
-                  value={refundTillId}
-                  onChange={(e) => setRefundTillId(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-slate-300"
+              {!currentTillId && (
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Refund to till</label>
+                  <select
+                    value={refundTillId}
+                    onChange={(e) => setRefundTillId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-300"
                   >
-                  <option value="">— Select a till —</option>
-                  {tills.map((t) => (
-                    <option key={t._id} value={t._id}>
-                      {t.code}
-                      {t.name ? ` · ${t.name}` : ''}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-500 mt-1">
-                  Choose which till's shift this refund is recorded against.
-                </p>
-              </div>
-            )}
+                    <option value="">— Select a till —</option>
+                    {tills.map((t) => (
+                      <option key={t._id} value={t._id}>
+                        {t.code}
+                        {t.name ? ` · ${t.name}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Choose which till's shift this refund is recorded against.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="p-6 border-t flex gap-3">
               <button
