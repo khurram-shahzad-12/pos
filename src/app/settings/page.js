@@ -577,7 +577,7 @@
 import { useState, useEffect } from 'react';
 import TopBar from '@/components/TopBar';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { BridgeClient, ReceiptBuilder } from 'pos-hardware-bridge';
+import { ThermalPrinterSDK } from 'web-thermal-printer';
 
 function SettingsPage() {
   const [settings, setSettings] = useState({
@@ -814,9 +814,9 @@ export default function SettingsPageWrapper() {
 function TillsSection() {
   const [tills, setTills] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null); 
+  const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
-  const [testingId, setTestingId] = useState(null); 
+  const [testingId, setTestingId] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -842,31 +842,29 @@ function TillsSection() {
   // 👇 FIX: use the till's own bridgeToken + printerId from the server
   const handleTestPrinter = async (till) => {
     setTestingId(till._id);
+
+    // Initialize the browser SDK
+    const printer = new ThermalPrinterSDK();
+
     try {
-      const res = await fetch(`/api/tills/${till._id}/printer`, {
-        credentials: 'include',
-        cache: 'no-store',
+      await printer.init();
+
+      // This will pop up the Chrome USB device selection window 
+      // if it hasn't been authorized yet.
+      // 1 = Vendor ID for many generic thermal printers, or it might just list all USB devices.
+      await printer.connectUSB(1);
+
+      // Send a test receipt directly from the browser
+      await printer.print({
+        type: 'text',
+        text: `TEST RECEIPT\n--------------------\nTill: ${till.name} (${till.code})\nStatus: Working\n--------------------\nThank you!`,
+        cut: true,
+        feed: 3,
       });
-      const cfg = await res.json();
-      if (!res.ok) throw new Error(cfg.error || 'Printer not configured');
 
-      const bridge = new BridgeClient({ token: cfg.token });
-
-      const bill = new ReceiptBuilder()
-        .center('TEST RECEIPT', { bold: true, size: 'large' })
-        .rule()
-        .row('Till:', till.name || till.code)
-        .row('Printer:', cfg.printerId || 'receipt')
-        .row('Status:', 'Working')
-        .rule()
-        .center('Thank you!')
-        .build();
-
-      await bridge.printReceipt(bill, { printer: cfg.printerId || 'receipt' });
-      alert('Test receipt sent successfully!');
+      alert('Test receipt printed successfully!');
     } catch (err) {
       console.error(err);
-      if (err.details) console.error('Error details:', err.details);
       alert('Printer connection failed: ' + err.message);
     } finally {
       setTestingId(null);
@@ -880,7 +878,7 @@ function TillsSection() {
         <div>
           <h2 className="text-lg font-bold text-slate-900">Tills</h2>
           <p className="text-sm text-slate-500">
-            Each till has its own bridge token, printer and Stripe reader.
+            Each till has its own WebUSB printer and Stripe reader.
           </p>
         </div>
         <button
@@ -921,17 +919,14 @@ function TillsSection() {
                   )}
                 </p>
                 <p className="text-xs text-slate-500 font-mono">
-                  {t.hasBridgeToken
-                    ? `Bridge OK · printer: ${t.printerId || 'receipt'}`
-                    : '⚠ no bridge token set — edit to add one'}
+                  USB Printer (WebUSB) — connected locally on this PC
                 </p>
-                {/* 👆 FIX */}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleTestPrinter(t)}
-                  disabled={!t.hasBridgeToken || testingId === t._id} // 👈 FIX: gate on token
+                  disabled={testingId === t._id}
                   className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg font-semibold hover:bg-blue-200 disabled:opacity-40 min-h-[40px]"
                 >
                   {testingId === t._id ? 'Printing…' : 'Test Receipt'}
@@ -976,8 +971,6 @@ function TillEditModal({ till, onClose, onSaved }) {
     name: till.name || '',
     code: till.code || '',
     location: till.location || '',
-    printerId: till.printerId || 'receipt',
-    bridgeToken: '',
     stripeReaderId: till.stripeReaderId || '',
     stripeLocationId: till.stripeLocationId || '',
   });
@@ -997,19 +990,11 @@ function TillEditModal({ till, onClose, onSaved }) {
     try {
       const url = isNew ? '/api/tills' : `/api/tills/${till._id}`;
       const method = isNew ? 'POST' : 'PUT';
-      const payload = { ...form };
-      if (!payload.bridgeToken || !payload.bridgeToken.trim()) {
-        delete payload.bridgeToken;
-      } else {
-        payload.bridgeToken = payload.bridgeToken.trim();
-      }
-      // 👆 FIX
-
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(form),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
@@ -1079,52 +1064,6 @@ function TillEditModal({ till, onClose, onSaved }) {
               className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 focus:border-blue-500 focus:outline-none"
             />
           </div>
-          <div className="pt-2 border-t border-slate-200">
-            <h4 className="text-sm font-bold text-slate-700 mb-3">
-              Receipt Printer (POS Hardware Bridge)
-            </h4>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Bridge Printer ID
-              </label>
-              <input
-                name="printerId"
-                value={form.printerId}
-                onChange={handleChange}
-                placeholder="receipt"
-                className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 focus:border-blue-500 focus:outline-none font-mono"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Must match the printer ID in the POS Hardware Bridge dashboard
-                (usually <code>receipt</code>).
-              </p>
-            </div>
-
-            <div className="mt-3">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Bridge Access Token
-              </label>
-              <input
-                name="bridgeToken"
-                type="password"
-                value={form.bridgeToken}
-                onChange={handleChange}
-                placeholder={
-                  till.hasBridgeToken
-                    ? '•••••••• (leave blank to keep)'
-                    : 'Paste token from bridge app'
-                }
-                className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 focus:border-blue-500 focus:outline-none font-mono"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                {till.hasBridgeToken
-                  ? 'A token is already set. Leave blank to keep it, or paste a new one to replace it.'
-                  : 'Get this from the POS Hardware Bridge app on the till PC.'}
-              </p>
-            </div>
-          </div>
-          {/* 👆 FIX */}
 
           <div className="pt-2 border-t border-slate-200">
             <h4 className="text-sm font-bold text-slate-700 mb-3">
