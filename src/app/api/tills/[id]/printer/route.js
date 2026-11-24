@@ -11,7 +11,7 @@ export async function GET(request, { params }) {
 
   const { id } = await params;
   if (!mongoose.isValidObjectId(id)) {
-    return NextResponse.json({ error: 'Invalid till' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid till' }, { status: 400 }); 
   }
 
   await dbConnect();
