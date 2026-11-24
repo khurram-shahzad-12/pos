@@ -145,24 +145,39 @@
 // }
 
 
-import { ReceiptBuilder } from 'pos-hardware-bridge';
+
+
 
 export function buildReceipt(sale, settings, options = {}) {
   const { isRefund = false } = options;
-  const bill = new ReceiptBuilder();
-  bill.center(String(settings.storeName || 'STORE'));
-  if (settings.storeAddress) {
-    bill.center(String(settings.storeAddress));
-  }
-  if (settings.vatNumber) {
-    bill.center('VAT: ' + String(settings.vatNumber));
-  }
-  bill.feed(1);
+  let text = '';
+  const center = (str) => {
+    const width = 48;
+    const padding = Math.max(0, Math.floor((width - str.length) / 2));
+    text += ' '.repeat(padding) + str + '\n';
+  };
+
+  const row = (left, right) => {
+    const width = 48;
+    const space = Math.max(1, width - left.length - right.length);
+    text += left + ' '.repeat(space) + right + '\n';
+  };
+
+  const rule = () => {
+    text += '-'.repeat(48) + '\n';
+  };
+
+  center(String(settings.storeName || 'STORE'));
+  if (settings.storeAddress) center(String(settings.storeAddress));
+  if (settings.vatNumber) center('VAT: ' + String(settings.vatNumber));
+  text += '\n';
+
   if (isRefund) {
-    bill.center('*** REFUND ***');
-    bill.feed(1);
+    center('*** REFUND ***');
+    text += '\n';
   }
-  bill.row('Receipt:', String(sale.receiptNumber || ''));
+
+  row('Receipt:', String(sale.receiptNumber || ''));
 
   const dt = new Date(sale.createdAt);
   const dateStr = dt.toLocaleString('en-GB', {
@@ -170,15 +185,14 @@ export function buildReceipt(sale, settings, options = {}) {
     hour: '2-digit', minute: '2-digit',
   });
 
-  bill.row('Date:', String(dateStr));
-  bill.row('Cashier:', String(sale.cashierName || 'Till'));
-  bill.row('Till:', '#' + String(sale.tillNumber || '1'));
-  bill.rule();
+  row('Date:', String(dateStr));
+  row('Cashier:', String(sale.cashierName || 'Till'));
+  row('Till:', '#' + String(sale.tillNumber || '1'));
+  rule();
 
-  // 4. Line Items
   for (const item of sale.items) {
     const code = item.vatCode || 'S';
-    bill.text(String(item.name) + ' [' + String(code) + ']');
+    text += String(item.name) + ' [' + String(code) + ']\n';
 
     let qtyStr = '';
     let unitPriceStr = '';
@@ -195,39 +209,38 @@ export function buildReceipt(sale, settings, options = {}) {
       unitPriceStr = `£${item.price.toFixed(2)}`;
       totalStr = '£' + (item.price * item.qty).toFixed(2);
     }
-
-    bill.row(`  ${qtyStr} x ${unitPriceStr}`, String(totalStr));
+    row(`  ${qtyStr} x ${unitPriceStr}`, String(totalStr));
   }
 
-  bill.rule();
-  bill.row('Subtotal (excl VAT)', '£' + Number(sale.subtotal || 0).toFixed(2));
+  rule();
+  row('Subtotal (excl VAT)', '£' + Number(sale.subtotal || 0).toFixed(2));
 
   if (sale.vatBreakdown && sale.vatBreakdown.length > 0) {
     for (const v of sale.vatBreakdown) {
-      bill.row(`VAT @ ${v.code} (${v.rate}%)`, '£' + Number(v.vatAmount || 0).toFixed(2));
+      row(`VAT @ ${v.code} (${v.rate}%)`, '£' + Number(v.vatAmount || 0).toFixed(2));
     }
   } else {
-    bill.row('VAT', '£' + Number(sale.tax || 0).toFixed(2));
+    row('VAT', '£' + Number(sale.tax || 0).toFixed(2));
   }
-
-  bill.rule();
+  rule();
 
   // Total
-  bill.total('TOTAL', '£' + Number(sale.total || 0).toFixed(2));
-  bill.feed(1);
-  if (sale.paymentMethod === 'cash' && sale.amountReceived != null) {
-    bill.row('Cash', '£' + Number(sale.amountReceived).toFixed(2));
-    bill.row('Paid (' + String(sale.paymentMethod).toUpperCase() + ')', '£' + Number(sale.total || 0).toFixed(2));
+  row('TOTAL', '£' + Number(sale.total || 0).toFixed(2));
+  text += '\n';
 
+  if (sale.paymentMethod === 'cash' && sale.amountReceived != null) {
+    row('Cash', '£' + Number(sale.amountReceived).toFixed(2));
+    row('Paid (' + String(sale.paymentMethod).toUpperCase() + ')', '£' + Number(sale.total || 0).toFixed(2));
     if (sale.changeGiven != null && Number(sale.changeGiven) > 0) {
-      bill.row('Change (Return)', '£' + Number(sale.changeGiven).toFixed(2));
+      row('Change (Return)', '£' + Number(sale.changeGiven).toFixed(2));
     }
   }
 
-  bill.feed(1);
-  bill.center(String(settings.receiptFooter || 'Thank you for your visit!'));
-  bill.feed(3);
-  return bill.build();
+  text += '\n';
+  center(String(settings.receiptFooter || 'Thank you for your visit!'));
+  text += '\n\n\n';
+
+  return text;
 }
 
 export function buildOpenDrawer() {

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTill } from '@/components/TillProvider';
 import { useCartStore } from '@/lib/store/cartStore';
 import { usePosTopBar } from '@/lib/context/PosTopBarContext';
-import { getBridge } from '@/lib/Printing';
+import { ThermalPrinterSDK } from 'web-thermal-printer';
 import { buildReceipt } from '@/lib/receiptBuilder';
 
 function CashierPage() {
@@ -221,31 +221,22 @@ function CashierPage() {
       setAmountReceived('');
       clearCart();
       fetchProducts();
-
-      // 👇 CHANGED: TRIGGER QZ TRAY LOCAL PRINTING
-      // 👇 NEW: TRIGGER POS HARDWARE BRIDGE PRINTING
-      try {
-        // 1. Connect to the bridge using your Access Token
-        // ⚠️ REPLACE WITH YOUR ACTUAL TOKEN
-        // const bridge = new BridgeClient({
-        //   token: '8d02f2d6da2618d821d944c8ec5df5234ab7edc593f90bab'
-        // });
-        const { bridge, printerId } = await getBridge(tillId);
-
-        // 2. Build the receipt
-        const bill = buildReceipt(data, storeSettings);
-
-        // 3. Print to the bridge (using the ID from the dashboard: 'receipt')
-        await bridge.printReceipt(bill, { printer: printerId });
+       try {
+        const receiptText = buildReceipt(data, storeSettings);
+        const printer = new ThermalPrinterSDK();
+        await printer.init();
+        await printer.connectUSB(1); 
+        await printer.print({
+          type: 'text',
+          text: receiptText,
+          cut: true,
+          feed: 3,
+        });
 
       } catch (printErr) {
-        console.error('Bridge printing failed:', printErr);
-         if (printErr.details) {
-    console.error('Error details:', printErr.details);
-  }
-        // We don't block the UI if printing fails, we just log it.
+        console.error('WebUSB printing failed:', printErr);
+        alert('Printing failed. Make sure printer is connected via USB and driver is set to WinUSB.\n\nError: ' + printErr.message);
       }
-
     } catch (err) {
       setError(err.message);
     } finally {
