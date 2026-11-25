@@ -225,11 +225,24 @@ function CashierPage() {
         const receiptText = buildReceipt(data, storeSettings);
         const printer = new ThermalPrinterSDK();
         await printer.init();
-        await printer.connectUSB(1); 
+        let device = null;
+        if(navigator.usb) {
+          const devices = await navigator.usb.getDevices();
+          if(devices.length > 0) {device = devices[0]}
+        }
+        if(device) {
+          try {
+            await printer.connect(device);
+          } catch (error) {
+            await printer.connectUSB(1);
+          }
+        } else {
+          await printer.connectUSB(1);
+        } 
         await printer.print({
           type: 'text',
           text: receiptText,
-          cut: true,
+          cut: false,
           feed: 3,
         });
 
