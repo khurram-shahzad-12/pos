@@ -1,7 +1,7 @@
 const KEY = 'pos.printer';
 let device = null;
 let endpointNumber = null;
-let connecting = null; // NEW: shared in-flight connection
+let connecting = null;
 
 function loadSaved() {
   try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; }

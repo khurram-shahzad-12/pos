@@ -4,8 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useTill } from '@/components/TillProvider';
 import { useCartStore } from '@/lib/store/cartStore';
 import { usePosTopBar } from '@/lib/context/PosTopBarContext';
-// import { ThermalPrinterSDK } from 'web-thermal-printer';
-// import { buildReceipt } from '@/lib/receiptBuilder';
 import { buildReceipt, encodeReceipt } from '@/lib/receiptBuilder';
 import { getPrinter, printBytes } from '@/lib/usbPrinter';
 
@@ -230,35 +228,6 @@ function CashierPage() {
       setAmountReceived('');
       clearCart();
       fetchProducts();
-      // try {
-      //   const receiptText = buildReceipt(data, storeSettings);
-      //   const printer = new ThermalPrinterSDK();
-      //   await printer.init();
-      //   let device = null;
-      //   if (navigator.usb) {
-      //     const devices = await navigator.usb.getDevices();
-      //     if (devices.length > 0) { device = devices[0] }
-      //   }
-      //   if (device) {
-      //     try {
-      //       await printer.connect(device);
-      //     } catch (error) {
-      //       await printer.connectUSB(1);
-      //     }
-      //   } else {
-      //     await printer.connectUSB(1);
-      //   }
-      //   await printer.print({
-      //     type: 'text',
-      //     text: receiptText,
-      //     cut: false,
-      //     feed: 3,
-      //   });
-
-      // } catch (printErr) {
-      //   console.error('WebUSB printing failed:', printErr);
-      //   alert('Printing failed. Make sure printer is connected via USB and driver is set to WinUSB.\n\nError: ' + printErr.message);
-      // }
       try {
         const bytes = encodeReceipt(buildReceipt(data, storeSettings));
         await printBytes(bytes);
@@ -282,7 +251,7 @@ function CashierPage() {
 
   const handleSetupPrinter = async () => {
     try {
-      await getPrinter({ allowPrompt: true }); // the only place the picker appears
+      await getPrinter({ allowPrompt: true });
       setPrinterReady(true);
       setError('');
     } catch (err) {
