@@ -122,7 +122,6 @@ export function buildReceipt(sale, settings, options = {}) {
   return text;
 }
 
-// NEW: converts the string to raw bytes, mapping £ to the correct byte
 export function encodeReceipt(text) {
   const out = [];
   for (const ch of text) {
