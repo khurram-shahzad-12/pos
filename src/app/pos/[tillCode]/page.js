@@ -4,8 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useTill } from '@/components/TillProvider';
 import { useCartStore } from '@/lib/store/cartStore';
 import { usePosTopBar } from '@/lib/context/PosTopBarContext';
-import { ThermalPrinterSDK } from 'web-thermal-printer';
-import { buildReceipt } from '@/lib/receiptBuilder';
+// import { ThermalPrinterSDK } from 'web-thermal-printer';
+// import { buildReceipt } from '@/lib/receiptBuilder';
+import { buildReceipt, encodeReceipt } from '@/lib/receiptBuilder';
+import { getPrinter, printBytes } from '@/lib/usbPrinter';
 
 function CashierPage() {
   const tillId = useTill();
@@ -25,6 +27,7 @@ function CashierPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [storeSettings, setStoreSettings] = useState({});
+  const [printerReady, setPrinterReady] = useState(false);
   const barcodeRef = useRef(null);
   const cartListRef = useRef(null);
 
@@ -63,6 +66,12 @@ function CashierPage() {
 
   const totalExVat = Math.round((subtotalInclVat - vatTotalBackCalculated) * 100) / 100;
   const finalTotal = subtotalInclVat;
+
+  useEffect(() => {
+    getPrinter()
+      .then(() => setPrinterReady(true))
+      .catch(() => setPrinterReady(false));
+  }, []);
 
   useEffect(() => {
     barcodeRef.current?.focus();
@@ -221,34 +230,42 @@ function CashierPage() {
       setAmountReceived('');
       clearCart();
       fetchProducts();
-       try {
-        const receiptText = buildReceipt(data, storeSettings);
-        const printer = new ThermalPrinterSDK();
-        await printer.init();
-        let device = null;
-        if(navigator.usb) {
-          const devices = await navigator.usb.getDevices();
-          if(devices.length > 0) {device = devices[0]}
-        }
-        if(device) {
-          try {
-            await printer.connect(device);
-          } catch (error) {
-            await printer.connectUSB(1);
-          }
-        } else {
-          await printer.connectUSB(1);
-        } 
-        await printer.print({
-          type: 'text',
-          text: receiptText,
-          cut: false,
-          feed: 3,
-        });
+      // try {
+      //   const receiptText = buildReceipt(data, storeSettings);
+      //   const printer = new ThermalPrinterSDK();
+      //   await printer.init();
+      //   let device = null;
+      //   if (navigator.usb) {
+      //     const devices = await navigator.usb.getDevices();
+      //     if (devices.length > 0) { device = devices[0] }
+      //   }
+      //   if (device) {
+      //     try {
+      //       await printer.connect(device);
+      //     } catch (error) {
+      //       await printer.connectUSB(1);
+      //     }
+      //   } else {
+      //     await printer.connectUSB(1);
+      //   }
+      //   await printer.print({
+      //     type: 'text',
+      //     text: receiptText,
+      //     cut: false,
+      //     feed: 3,
+      //   });
 
+      // } catch (printErr) {
+      //   console.error('WebUSB printing failed:', printErr);
+      //   alert('Printing failed. Make sure printer is connected via USB and driver is set to WinUSB.\n\nError: ' + printErr.message);
+      // }
+      try {
+        const bytes = encodeReceipt(buildReceipt(data, storeSettings));
+        await printBytes(bytes);
       } catch (printErr) {
-        console.error('WebUSB printing failed:', printErr);
-        alert('Printing failed. Make sure printer is connected via USB and driver is set to WinUSB.\n\nError: ' + printErr.message);
+        console.error('Printing failed:', printErr);
+        setPrinterReady(false);
+        alert('Printing failed: ' + printErr.message);
       }
     } catch (err) {
       setError(err.message);
@@ -263,6 +280,15 @@ function CashierPage() {
     setTimeout(() => barcodeRef.current?.focus(), 100);
   };
 
+  const handleSetupPrinter = async () => {
+    try {
+      await getPrinter({ allowPrompt: true }); // the only place the picker appears
+      setPrinterReady(true);
+      setError('');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -320,6 +346,14 @@ function CashierPage() {
 
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col p-4 overflow-hidden">
+          {!printerReady && (
+            <button
+              onClick={handleSetupPrinter}
+              className="mb-3 w-full px-4 py-3 bg-amber-500 text-white font-semibold rounded-xl hover:bg-amber-400 min-h-[44px]"
+            >
+              Setup Printer (click once to connect)
+            </button>
+          )}
           <form onSubmit={handleBarcodeSubmit} className="mb-4">
             <input
               ref={barcodeRef}
